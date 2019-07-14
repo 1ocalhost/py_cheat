@@ -1,10 +1,12 @@
 import base64
 import re
 import time
+import datetime
 import socket
 import functools
 import requests
 import urllib.parse as uparse
+import copy
 
 
 def my_b64_decode(data):
@@ -14,6 +16,10 @@ def my_b64_decode(data):
 
 def my_b64_url_encode(s):
     return base64.urlsafe_b64encode(s.encode('utf-8')).decode('utf-8')
+
+
+def b64_encode_param(s):
+    return my_b64_url_encode(s).replace('=', '')
 
 
 def my_split_no_empty(obj, sep):
@@ -76,16 +82,16 @@ class ProxyItemParser:
 
             return item
 
-        return my_b64_url_encode(replace())
+        return b64_encode_param(replace())
 
 
 def item_conv_impl(group, item):
     parser = ProxyItemParser()
     server_host = parser.replace_server(item[0][0])
-    item[1]['remarks'] = parser.replace_remark().replace('=', '')
-    item[1]['group'] = group.replace('=', '')
+    item[1]['remarks'] = parser.replace_remark()
+    item[1]['group'] = group
 
-    return server_host + ':' + item[0][1], item[1]
+    return [server_host + ':' + item[0][1], item[1]]
 
 
 def parse_feed_item(feed, group_name):
@@ -94,18 +100,18 @@ def parse_feed_item(feed, group_name):
     proxy_items = {a[0]: (a, b) for a, b in proxy_items[2:]}
     proxy_items = [v for k, v in proxy_items.items()]
 
-    group = my_b64_url_encode(group_name)
+    group = b64_encode_param(group_name)
     item_conv = functools.partial(item_conv_impl, group)
     return list(map(item_conv, proxy_items))
 
 
-def encode_feed_item(items):
+def encode_feed_item(items, info):
     def encode_proxy_item(item):
         raw_data = item[0] + '/?' + uparse.urlencode(item[1])
         return 'ssr://' + my_b64_url_encode(raw_data)
 
     items.sort(key=lambda x: x[1]['remarks'])
-    items = list(map(encode_proxy_item, items))
+    items = list(map(encode_proxy_item, info + items))
 
     new_feed_raw = '\n'.join(items)
     return my_b64_url_encode(new_feed_raw)
@@ -123,8 +129,13 @@ def convert_feed(url, group_name):
         return None
 
     items = parse_feed_item(r.text, group_name)
-    new_feed = encode_feed_item(items)
-    return new_feed
+    info_time = copy.deepcopy(items[0])
+
+    now = re.sub(r'\.\d+', '', f'{datetime.datetime.now()}')
+    info_time[1]['remarks'] = b64_encode_param('Update: ' + now)
+    info_time[0] = re.sub('^[^:]+', 'google.com', info_time[0])
+
+    return encode_feed_item(items, [info_time])
 
 # Usage:
 # convert_feed('https://example.com/feed.txt', 'GroupName')

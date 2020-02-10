@@ -21,6 +21,13 @@ async def read_http_header(reader):
     return header
 
 
+def remore_useless_header(header):
+    def not_proxy_keep_alive(x):
+        return not x.lower().startswith('proxy-connection:')
+
+    return list(filter(not_proxy_keep_alive, header))
+
+
 async def get_request_info_from_header(reader):
     header = await read_http_header(reader)
     if not header:
@@ -48,6 +55,7 @@ async def get_request_info_from_header(reader):
         method_args[1] = '/' + m.group(3)
         header_items[0] = ' '.join(method_args)
 
+    header_items = remore_useless_header(header_items)
     new_header = '\r\n'.join(header_items).encode()
     return new_header, tunnel_mode, (host, port)
 

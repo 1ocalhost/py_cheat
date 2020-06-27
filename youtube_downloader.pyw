@@ -84,6 +84,10 @@ class AppFrame(Frame):
         url = str(self.clipboard_get().strip())
         video_id = self.extract_video_id(url)
         if not video_id:
+            MAX_LEN = 1024
+            url = url.replace('\n', ' ')
+            if len(url) > MAX_LEN:
+                url = url[:MAX_LEN] + '...'
             messagebox.showwarning(
                 message=f'It\'s not a link for YouTube video: "{url}"')
             return

@@ -16,15 +16,35 @@ def read_color_table_flag(reader, offset):
     return 0
 
 
+def make_xmp_magic_trailer():
+    return b'\x01' \
+        + b''.join([b'%c' % n for n in range(0xff, -1, -1)]) \
+        + b'\x00'
+
+
+XMP_MAGIC_TRAILER = make_xmp_magic_trailer()
+
+
+def skip_xmp_extension(reader, offset):
+    for data_len in [2, 20, 200]:
+        data_len *= 1024
+        data = reader.read(offset, data_len)
+        pos = data.find(XMP_MAGIC_TRAILER)
+        if pos != -1:
+            return offset + pos + len(XMP_MAGIC_TRAILER)
+
+
 def parse_gif_extension(type_, reader, block_begin):
     if type_ != 9:
         return
 
     block_begin += 1
-    if reader.read(block_begin, 13) == b'\xff\x0bNETSCAPE2.0':
+    if reader.compare(block_begin, b'\xff\x0bNETSCAPE2.0'):
         block_begin += 18
-    elif reader.read(block_begin, 2) == b'\xf9\x04' \
-            and reader.read(block_begin + 6, 1) == b'\x00':
+    elif reader.compare(block_begin, b'\xff\x0bXMP DataXMP'):
+        return skip_xmp_extension(reader, block_begin)
+    elif reader.compare(block_begin, b'\xf9\x04') \
+            and reader.compare(block_begin + 6, b'\x00'):
         block_begin += 7
     else:
         return
@@ -89,6 +109,9 @@ class FileReader:
     def read(self, offset, length):
         self.data_file.seek(offset, 0)
         return self.data_file.read(length)
+
+    def compare(self, offset, data):
+        return self.read(offset, len(data)) == data
 
     def size(self):
         return os.fstat(self.data_file.fileno()).st_size
